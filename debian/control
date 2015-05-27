@@ -2,13 +2,13 @@ Source: chronos
 Section: network
 Priority: optional
 Maintainer: Project Clearwater Maintainers <maintainers@projectclearwater.org>
-Build-Depends: debhelper (>= 8.0.0), devscripts, build-essential, libboost-program-options-dev, libcurl-ssl-dev, libevent-dev, google-mock, libboost-regex1.46-dev, libboost-filesystem-dev
+Build-Depends: debhelper (>= 8.0.0), devscripts, build-essential, libboost-program-options-dev, libcurl-ssl-dev, libevent-dev, google-mock, libboost-regex-dev ( >= 1.54.0), libboost-filesystem-dev ( >= 1.54.0)
 Standards-Version: 3.9.2
 Homepage: http://github.com/Metaswitch/chronos
 
 Package: chronos
 Architecture: any
-Depends: clearwater-infrastructure, libboost-program-options1.46.1, libboost-regex1.46.1, libboost-filesystem1.46.1, libevent-2.0-5, libevent-pthreads-2.0-5, libc-ares-dev, clearwater-snmp-handler-chronos, clearwater-log-cleanup
+Depends: clearwater-infrastructure, libboost-program-options-dev ( >= 1.54.0), libboost-regex-dev ( >= 1.54.0), libboost-filesystem-dev ( >= 1.54.0), libevent-2.0-5, libevent-pthreads-2.0-5, libc-ares-dev, clearwater-snmp-handler-chronos, clearwater-log-cleanup
 Description: Distributed, redundant network timer service.
 
 Package: chronos-dbg
