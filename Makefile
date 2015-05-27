@@ -25,7 +25,7 @@ CPPFLAGS_BUILD := -O0
 CPPFLAGS_TEST := -O0 -fprofile-arcs -ftest-coverage -DUNITTEST -I${ROOT}/src/test/ -I${ROOT}/modules/cpp-common/test_utils/ -fno-access-control -I$(GTEST_DIR)/include -I$(GMOCK_DIR)/include
 LDFLAGS := -L${INSTALL_DIR}/lib -lrt -lpthread -lcurl -levent -lboost_program_options -lboost_regex -lzmq -lc -lboost_filesystem -lboost_system -levhtp \
            -levent_pthreads -lcares
-LDFLAGS_BUILD := -lsas
+LDFLAGS_BUILD := -lsas -lz
 LDFLAGS_TEST := -ldl
 LDFLAGS_TEST := $(LDFLAGS_TEST)-ldl
 
