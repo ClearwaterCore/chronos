@@ -1,9 +1,9 @@
 [submodule "build-infra"]
 	path = build-infra
-	url = git@github.com:Metaswitch/clearwater-build-infra.git
+	url = git@github.com:ClearwaterCore/clearwater-build-infra.git
 [submodule "modules/cpp-common"]
 	path = modules/cpp-common
-	url = git@github.com:Metaswitch/cpp-common.git
+	url = git@github.com:ClearwaterCore/cpp-common.git
 [submodule "modules/curl"]
 	path = modules/curl
 	url = git@github.com:bagder/curl.git
@@ -15,13 +15,13 @@
 	url = git@github.com:miloyip/rapidjson.git
 [submodule "modules/libevhtp"]
 	path = modules/libevhtp
-	url = git@github.com:Metaswitch/libevhtp.git
+	url = git@github.com:ClearwaterCore/libevhtp.git
 [submodule "modules/sas-client"]
 	path = modules/sas-client
-	url = git@github.com:Metaswitch/sas-client.git
+	url = git@github.com:ClearwaterCore/sas-client.git
 [submodule "modules/gmock"]
 	path = modules/gmock
-	url = git@github.com:Metaswitch/gmock-upstream.git
+	url = git@github.com:ClearwaterCore/gmock-upstream.git
 [submodule "modules/gcovr"]
 	path = modules/gcovr
 	url = https://github.com/gcovr/gcovr
