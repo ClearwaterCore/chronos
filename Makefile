@@ -27,7 +27,6 @@ LDFLAGS := -L${INSTALL_DIR}/lib -lrt -lpthread -lcurl -levent -lboost_program_op
            -levent_pthreads -lcares
 LDFLAGS_BUILD := -lsas -lz
 LDFLAGS_TEST := -ldl
-LDFLAGS_TEST := $(LDFLAGS_TEST)-ldl
 
 TEST_XML = $(TEST_OUT_DIR)/test_detail_$(TARGET_TEST).xml
 COVERAGE_XML = $(TEST_OUT_DIR)/coverage_$(TARGET_TEST).xml
