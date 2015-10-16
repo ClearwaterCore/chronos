@@ -59,11 +59,6 @@ MONIT_SRC_CONF_FILE=$SRC_CONF_DIR/chronos.monit
 
 case "$1" in
   configure)
-    if [ ! -e /etc/chronos/chronos_cluster.conf ]; then
-	if [ -e /usr/share/clearwater/bin/chronos_configuration_split.py ]; then
-	    /usr/share/clearwater/bin/chronos_configuration_split.py || true
-	fi
-    fi
     install $MONIT_SRC_CONF_FILE $MONIT_CONF_FILE
     reload clearwater-monit || true
 
