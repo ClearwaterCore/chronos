@@ -49,8 +49,11 @@ include $(patsubst %, mk/%.mk, ${SUBMODULES})
 submodules :
 	${MAKE} ${SUBMODULES}
 
+.PHONY: build
+build: ${SUBMODULES} chronos
+
 .PHONY: deb
-deb: chronos
+deb: build
 	${MAKE} deb-only
 
 ROOT := $(shell pwd)
