@@ -5,27 +5,27 @@ COMMON_SOURCES := chronos_internal_connection.cpp handlers.cpp replicator.cpp ti
 chronos_SOURCES := ${COMMON_SOURCES} main.cpp snmp_infinite_timer_count_table.cpp snmp_infinite_scalar_table.cpp snmp_counter_table.cpp snmp_continuous_increment_table.cpp snmp_infinite_base_table.cpp load_monitor.cpp
 chronos_test_SOURCES := ${COMMON_SOURCES} base.cpp fakesnmp.cpp test_globals.cpp test_handler.cpp test_main.cpp test_timer.cpp test_timer_handler.cpp test_timer_replica_choosing.cpp test_timer_store.cpp timer_helper.cpp test_interposer.cpp test_chronos_internal_connection.cpp fakelogger.cpp mock_sas.cpp fakecurl.cpp pthread_cond_var_helper.cpp mock_increment_table.cpp mock_infinite_table.cpp mock_scalar_table.cpp
 
-COMMON_CPPFLAGS := -Isrc/include \
+COMMON_CPPFLAGS := -Iinclude \
                    -Imodules/cpp-common/include \
                    -Imodules/rapidjson/include \
                    -Imodules/sas-client/include \
                    -Ibuild/usr/include
 chronos_CPPFLAGS := ${COMMON_CPPFLAGS}
-chronos_test_CPPFLAGS := ${COMMON_CPPFLAGS} -Imodules/cpp-common/test_utils -Isrc/test
+chronos_test_CPPFLAGS := ${COMMON_CPPFLAGS} -Imodules/cpp-common/test_utils -Isrc/ut
 
 COMMON_LDFLAGS := -Lbuild/usr/lib -lrt -lpthread -lcurl -levent -lboost_program_options -lboost_regex -lzmq -lc -lboost_filesystem -lboost_system -levhtp -levent_pthreads -lcares $(shell net-snmp-config --netsnmp-agent-libs)
 
 chronos_LDFLAGS := ${COMMON_LDFLAGS} -lsas -lz
 chronos_test_LDFLAGS := ${COMMON_LDFLAGS} -ldl
 
-VPATH := modules/cpp-common/src modules/cpp-common/test_utils src/main src/test src/main/murmur
+VPATH := modules/cpp-common/src modules/cpp-common/test_utils src/ src/ut src/murmur
 
 BUILD_DIR := build
 GMOCK_DIR := modules/gmock
 GCOVR_DIR := modules/gcovr
 
-chronos_test_EXCLUSION_FILE := src/test/coverage-not-yet
-chronos_test_COVERAGE_EXCLUSIONS := ^modules|^src/test
+chronos_test_EXCLUSION_FILE := src/ut/coverage-not-yet
+chronos_test_COVERAGE_EXCLUSIONS := ^modules|^src/ut
 chronos_test_LD_LIBRARY_PATH := build/usr/lib
 include build-infra/cpp.mk
 
