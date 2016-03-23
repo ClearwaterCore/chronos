@@ -19,6 +19,7 @@ modules/cpp-common/src/accumulator.cpp
 modules/cpp-common/src/chronosconnection.cpp
 modules/cpp-common/src/dnscachedresolver.cpp
 modules/cpp-common/src/log.cpp
+modules/cpp-common/src/pdlog.cpp
 modules/cpp-common/src/health_checker.cpp
 modules/cpp-common/src/httpconnection.cpp
 modules/cpp-common/src/statistic.cpp
