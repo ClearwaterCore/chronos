@@ -1,6 +1,6 @@
 Name:           chronos
-Version:        1.2
-Release:        1
+Version:        %{_version}
+Release:        %{_datestamp}_%{_git_hash}
 Summary:        Clearwater distributed timer store
 
 License:        GPL
