@@ -1,5 +1,5 @@
 build/bin/chronos /usr/bin
-build/usr/lib/*.so /usr/share/chronos/lib
-build/usr/lib/*.so.* /usr/share/chronos/lib
-etc /
-usr /
+modules/cpp-common/scripts/stats-c/cw_stat usr/share/clearwater/chronos/bin
+usr/lib/*.so /usr/share/chronos/lib
+usr/lib/*.so.* /usr/share/chronos/lib
+chronos.root/* /

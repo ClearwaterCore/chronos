@@ -1,6 +1,9 @@
 *~
 /build/
+/usr/
 /gcov/
 *.swp
 tags
 debian/copyright
+
+*.gcov
