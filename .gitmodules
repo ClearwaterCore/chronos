@@ -18,7 +18,7 @@
 	url = git@github.com:ClearwaterCore/libevhtp.git
 [submodule "modules/gmock"]
 	path = modules/gmock
-	url = git@github.com:Metaswitch/gmock-upstream.git
+	url = git@github.com:ClearwaterCore/gmock-upstream.git
 [submodule "modules/gcovr"]
 	path = modules/gcovr
 	url = https://github.com/gcovr/gcovr
