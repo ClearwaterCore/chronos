@@ -275,7 +275,7 @@ void TimerHandler::return_timer(Timer* timer, bool callback_successful)
   }
 
   // We succeeded but may need to tombstone the timer
-  if ((timer->sequence_number + 1) * timer->interval_ms > timer->repeat_for)
+  if (((timer->sequence_number + 1) * timer->interval_ms > timer->repeat_for) || (timer->interval_ms == 0 && timer->repeat_for == 0))
   {
     // This timer won't pop again, so tombstone it and update statistics
     timer->become_tombstone();
