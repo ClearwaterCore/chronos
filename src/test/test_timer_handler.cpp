@@ -582,6 +582,50 @@ TEST_F(TestTimerHandler, PopTombstoneTimer)
   // timer1 has been deleted by the handler
 }
 
+// Return a timer to the handler as if it has been passed back from
+// HTTPCallback and wont pop again. Give the timer an interval and
+// repeat_for value of 0. The timer should be tombstoned before
+// being put back into the store.
+TEST_F(TestTimerHandler, TombstoneZeroIntervalAndRepeatForTimer)
+{
+  Timer* timer1 = default_timer(1);
+  // Set timer1 up so that it wouldn't pop again.
+  timer1->sequence_number = 1;
+  timer1->interval_ms = 0;
+  timer1->repeat_for = 0;
+
+  TimerPair insert_pair;
+
+  // Once we add the timer, we'll poll the store for a new timer, expect an extra
+  // call to fetch_next_timers().
+  EXPECT_CALL(*_store, fetch_next_timers(_)).
+                       WillOnce(SetArgReferee<0>(std::unordered_set<TimerPair>())).
+                       WillOnce(SetArgReferee<0>(std::unordered_set<TimerPair>()));
+
+  _th = new TimerHandler(_store, _callback, _replicator, NULL, _fake_cont_table, _fake_table);
+  _cond()->block_till_waiting();
+
+  // The timer is being returned from a callback, and won't pop again.
+  // This should update statistics, and be returned to the store as a tombstone.
+  EXPECT_CALL(*_replicator, replicate(timer1));
+
+  EXPECT_CALL(*_store, fetch(timer1->id, _)).WillOnce(Return(false));
+  EXPECT_CALL(*_store, insert(_, timer1->id, timer1->next_pop_time(), _)).
+                       WillOnce(SaveArg<0>(&insert_pair));
+  _th->return_timer(timer1, true);
+
+  // The timer is successfully added. As it's a new timer (as the pop would have
+  // removed it from the store) it's passed through to the store unchanged.
+  EXPECT_EQ(insert_pair.active_timer, timer1);
+  EXPECT_TRUE(insert_pair.active_timer->is_tombstone());
+
+  // Delete the timer (this is normally done by the insert call, but this
+  // is mocked out)
+  _cond()->block_till_waiting();
+
+  delete timer1;
+}
+
 // Return a timer to the store as if it has been passed back from HTTPCallback
 TEST_F(TestTimerHandler, ReturnTimerSuccessful)
 {
