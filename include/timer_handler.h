@@ -64,6 +64,7 @@ public:
                SNMP::InfiniteTimerCountTable*,
                SNMP::InfiniteScalarTable*);
   virtual ~TimerHandler();
+  TimerHandler(const TimerHandler& copy) = delete;
   virtual void add_timer(Timer*, bool=true);
   virtual void return_timer(Timer*);
   virtual void handle_successful_callback(TimerID id);
@@ -73,6 +74,7 @@ public:
   virtual HTTPCode get_timers_for_node(std::string node,
                                        int max_responses,
                                        std::string cluster_view_id,
+                                       uint32_t time_from,
                                        std::string& get_response);
   void run();
 

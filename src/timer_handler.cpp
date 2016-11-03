@@ -46,7 +46,7 @@
 
 void* TimerHandler::timer_handler_entry_func(void* arg)
 {
-  ((TimerHandler*)arg)->run();
+  static_cast<TimerHandler*>(arg)->run();
   return NULL;
 }
 
@@ -106,7 +106,6 @@ TimerHandler::~TimerHandler()
 void TimerHandler::add_timer(Timer* timer, bool update_stats)
 {
   pthread_mutex_lock(&_mutex);
-  bool will_add_timer = true;
 
   // Convert the new timer to a timer pair
   TimerPair new_tp;
@@ -119,6 +118,7 @@ void TimerHandler::add_timer(Timer* timer, bool update_stats)
   // We've found a timer.
   if (timer_found)
   {
+    bool will_add_timer = true;
     std::string cluster_view_id;
     __globals->get_cluster_view_id(cluster_view_id);
 
@@ -184,7 +184,8 @@ void TimerHandler::add_timer(Timer* timer, bool update_stats)
       }
     }
 
-    // We're adding the new timer (not just replacing an existing timer)
+    // We're adding the new timer (rather than discarding it and putting the
+    // existing timer back in the store)
     if (will_add_timer)
     {
       // If the new timer is a tombstone, make sure its interval is long enough
@@ -436,10 +437,14 @@ void TimerHandler::update_replica_tracker_for_timer(TimerID id,
 HTTPCode TimerHandler::get_timers_for_node(std::string request_node,
                                            int max_responses,
                                            std::string cluster_view_id,
+                                           uint32_t time_from,
                                            std::string& get_response)
 {
+  // We pass in the time_from parameter from the handlers. We will use this
+  // parameter in the future to help with resynchronisation operations. We
+  // pass it into the timer handler now to help with UTing the handler code
+
   pthread_mutex_lock(&_mutex);
-  std::unordered_set<TimerPair> timers;
 
   // Create the JSON doc for the Timer information
   rapidjson::StringBuffer sb;
@@ -577,7 +582,6 @@ bool TimerHandler::timer_is_on_node(std::string request_node,
 // pop, check the timer store to make sure we're holding the nearest timers.
 void TimerHandler::run() {
   std::unordered_set<TimerPair> next_timers;
-  std::unordered_set<Timer*>::iterator sample_timer;
 
   pthread_mutex_lock(&_mutex);
 
@@ -602,11 +606,15 @@ void TimerHandler::run() {
       // secs/nsecs appropriately).
       if (next_pop.tv_nsec < (1000 - _store->SHORT_WHEEL_RESOLUTION_MS) * 1000 * 1000)
       {
+        // LCOV_EXCL_START - We can't guarantee which of these two paths we go
+        // through in UT
         next_pop.tv_nsec += _store->SHORT_WHEEL_RESOLUTION_MS * 1000 * 1000;
+        // LCOV_EXCL_STOP
       }
       else
       {
-        // LCOV_EXCL_START
+        // LCOV_EXCL_START - We can't guarantee which of these two paths we go
+        // through in UT
         next_pop.tv_nsec -= (1000 - _store->SHORT_WHEEL_RESOLUTION_MS) * 1000 * 1000;
         next_pop.tv_sec += 1;
         // LCOV_EXCL_STOP
@@ -679,6 +687,7 @@ void TimerHandler::pop(Timer* timer)
   timer->update_cluster_information();
 
   // The callback borrows of the timer at this point.
+  // cppcheck-suppress uselessAssignmentPtrArg
   _callback->perform(timer); timer = NULL;
 }
 

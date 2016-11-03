@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/bin/sh
 
-# @file write_monit_restart_diags
+# @file check-chronos-uptime
 #
 # Project Clearwater - IMS in the Cloud
-# Copyright (C) 2013  Metaswitch Networks Ltd
+# Copyright (C) 2016  Metaswitch Networks Ltd
 #
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -34,23 +34,7 @@
 # under which the OpenSSL Project distributes the OpenSSL toolkit software,
 # as those licenses appear in the file LICENSE-OPENSSL.
 
-# Called by monit to gather extra diags from chronos before it is restarted due
-# to being unresponsive.
-
-PIDFILE=/var/run/chronos/chronos.pid
-DIAGS_DIR=/var/log/chronos/monit_restart_diags
-
-# Ensure the extra diags directory exists.
-[ -e "$DIAGS_DIR" ] || mkdir $DIAGS_DIR
-
-# Gather the diagnostics we want:
-# -  What the PID file things the chronos PID is.
-# -  What chronos processes are actually running.
-# -  What sockets chronos has open.
-# -  Whether it's responding to pings.
-cat $PIDFILE                       > $DIAGS_DIR/pidfile
-ps -eaf                            > $DIAGS_DIR/processes.log
-netstat -plan                      > $DIAGS_DIR/netstat.log 2>&1
-curl --verbose --silent --max-time 1 http://localhost:7253/ping > $DIAGS_DIR/ping.log 2>&1
-
-:
+# Monit 5.8.1 does not support passing arguments to check program scripts.
+# check-uptime provides common uptime-checking code. This wrapper script
+# uses it, and can be called with no arguments.
+/usr/share/clearwater/bin/check-uptime /var/run/chronos/chronos.pid monit 3000.1

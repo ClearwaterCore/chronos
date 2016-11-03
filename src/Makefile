@@ -9,8 +9,8 @@ COMMON_SOURCES := chronos_internal_connection.cpp \
                   http_callback.cpp \
                   timer.cpp \
                   timer_store.cpp \
+                  timer_heap.cpp \
                   log.cpp \
-                  pdlog.cpp \
                   logger.cpp \
                   unique.cpp \
                   signalhandler.cpp \
@@ -21,13 +21,15 @@ COMMON_SOURCES := chronos_internal_connection.cpp \
                   utils.cpp \
                   health_checker.cpp \
                   exception_handler.cpp \
+                  http_connection_pool.cpp \
+                  httpclient.cpp \
                   httpconnection.cpp \
                   statistic.cpp \
                   baseresolver.cpp \
                   dnscachedresolver.cpp \
                   dnsparser.cpp \
                   zmq_lvc.cpp \
-                  httpresolver.cpp \
+                  a_record_resolver.cpp \
                   counter.cpp \
                   snmp_scalar.cpp \
                   snmp_agent.cpp \

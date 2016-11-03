@@ -97,15 +97,15 @@ Timer::~Timer()
 }
 
 // Returns the next pop time in ms.
-uint32_t Timer::next_pop_time()
+uint32_t Timer::next_pop_time() const
 {
   std::string localhost;
   int replica_index = 0;
   __globals->get_cluster_local_ip(localhost);
 
-  for (std::vector<std::string>::iterator it = replicas.begin();
-                                          it != replicas.end();
-                                          ++it, ++replica_index)
+  for (std::vector<std::string>::const_iterator it = replicas.begin();
+       it != replicas.end();
+       ++it, ++replica_index)
   {
     if (*it == localhost)
     {
@@ -116,6 +116,20 @@ uint32_t Timer::next_pop_time()
   return start_time_mono_ms + ((sequence_number + 1) * interval_ms) + (replica_index * 2 * 1000);
 }
 
+uint64_t Timer::get_pop_time() const
+{
+  // The timer heap operates on 64-bit numbers, and expects times to overflow
+  // at the 64-bit overflow point, whereas Chronos uses 32-bit numbers. If we
+  // just provide 32-bit numbers to the heap, they will wrap at the wrong point
+  // and our overflow tests will fail. To avoid that, we shift the pop time 32
+  // bits to the left when providing it to the heap, so that times are still in
+  // the same order but they wrap at the 64-bit overflow point.
+  //
+  // This time is only used for heap ordering - when we get this out of the
+  // heap, we'll use next_pop_time() which returns the right time.
+  return (uint64_t)next_pop_time() << 32;
+}
+
 // Create the timer's URL from a given hostname
 std::string Timer::url(std::string host)
 {
@@ -123,16 +137,10 @@ std::string Timer::url(std::string host)
 
   if (host != "")
   {
-    std::string address;
-    int port;
-    if (!Utils::split_host_port(host, address, port))
-    {
-      // Just use the server as the address.
-      address = host;
-      __globals->get_bind_port(port);
-    }
+    int default_port;
+    __globals->get_bind_port(default_port);
 
-    ss << "http://" << address << ":" << port;
+    ss << "http://" << Utils::uri_address(host, default_port);
   }
 
   ss << "/timers/";
@@ -392,7 +400,7 @@ static void calculate_rendezvous_hash(std::vector<std::string> cluster,
   // Pick the lowest hash value as the primary replica.
   for (std::map<uint32_t, size_t>::iterator ii = hash_to_idx.begin();
        ii != hash_to_idx.end();
-       ii++)
+       ++ii)
   {
     ordered_cluster.push_back(cluster[ii->second]);
   }
@@ -423,7 +431,7 @@ void Timer::calculate_replicas(TimerID id,
                                Hasher* hasher)
 {
   std::vector<std::string> old_replicas;
-  replicas.empty();
+  replicas.clear();
 
   // Calculate the replicas for the current cluster.
   calculate_rendezvous_hash(new_cluster,
@@ -868,7 +876,7 @@ Timer* Timer::from_json_obj(TimerID id,
       TRC_DEBUG("Statistics object not present, or badly formed. Discarding all tags.");
     }
   }
-  catch (JsonFormatError err)
+  catch (JsonFormatError& err)
   {
     error = "Badly formed Timer entry - hit error on line " + std::to_string(err._line);
     delete timer; timer = NULL;

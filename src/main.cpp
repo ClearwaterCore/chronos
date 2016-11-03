@@ -70,6 +70,7 @@ struct options
   std::string config_file;
   std::string cluster_config_file;
   std::string pidfile;
+  bool daemon;
 };
 
 // Enum for option types not assigned short-forms
@@ -78,6 +79,7 @@ enum OptionTypes
   CONFIG_FILE = 128, // start after the ASCII set ends to avoid conflicts
   CLUSTER_CONFIG_FILE,
   PIDFILE,
+  DAEMON,
   HELP
 };
 
@@ -86,6 +88,7 @@ const static struct option long_opt[] =
   {"config-file", required_argument, NULL, CONFIG_FILE},
   {"cluster-config-file", required_argument, NULL, CLUSTER_CONFIG_FILE},
   {"pidfile", required_argument, NULL, PIDFILE},
+  {"daemon", no_argument, NULL, DAEMON},
   {"help", no_argument, NULL, HELP},
   {NULL, 0, NULL, 0},
 };
@@ -94,10 +97,11 @@ void usage(void)
 {
   puts("Options:\n"
        "\n"
-       " --config-file <filename> Specify the per node configuration file\n"
+       " --config-file <filename>         Specify the per node configuration file\n"
        " --cluster-config-file <filename> Specify the cluster configuration file\n"
-       " --pidfile <filename> Specify the pidfile\n"
-       " --help Show this help screen\n");
+       " --pidfile <filename>             Specify the pidfile\n"
+       " --daemon                         Run in the background as a daemon\n"
+       " --help                           Show this help screen\n");
 }
 
 int init_options(int argc, char**argv, struct options& options)
@@ -119,6 +123,10 @@ int init_options(int argc, char**argv, struct options& options)
 
     case PIDFILE:
       options.pidfile = std::string(optarg);
+      break;
+
+    case DAEMON:
+      options.daemon = true;
       break;
 
     case HELP:
@@ -182,21 +190,38 @@ int main(int argc, char** argv)
   options.config_file = "/etc/chronos/chronos.conf";
   options.cluster_config_file = "/etc/chronos/chronos_cluster.conf";
   options.pidfile = "";
+  options.daemon = false;
 
   if (init_options(argc, argv, options) != 0)
   {
     return 1;
   }
 
-  // Initialize the global configuration. Creating the __globals object
-  // updates the global configuration
-  __globals = new Globals(options.config_file,
-                          options.cluster_config_file);
+  // Copy the program name to a string so that we can be sure of its lifespan -
+  // the memory passed to openlog must be valid for the duration of the program.
+  //
+  // Note that we don't save syslog_identity here, and so we're technically leaking
+  // this object. However, its effectively part of static initialisation of
+  // the process - it'll be freed on process exit - so it's not leaked in practice.
+  std::string* syslog_identity = new std::string("chronos");
 
-  // Initialise ENT logging before making "Started" log
-  PDLogStatic::init(argv[0]);
+  // Open a connection to syslog. This is used for ENT logs.
+  openlog(syslog_identity->c_str(), LOG_PID, LOG_LOCAL7);
+
 
   CL_CHRONOS_STARTED.log();
+
+  if (options.daemon)
+  {
+    // Options parsed and validated, time to demonize before writing out our
+    // pidfile or spwaning threads.
+    int errnum = Utils::daemonize();
+    if (errnum != 0)
+    {
+      TRC_ERROR("Failed to convert to daemon, %d (%s)", errnum, strerror(errnum));
+      exit(0);
+    }
+  }
 
   // Log the PID, this is useful for debugging if monit restarts chronos.
   TRC_STATUS("Starting with PID %d", getpid());
@@ -212,6 +237,15 @@ int main(int argc, char** argv)
     }
   }
 
+  start_signal_handlers();
+
+  // Initialize the global configuration. Creating the __globals object
+  // updates the global configuration. It also creates an updater thread,
+  // so this mustn't be created until after the process has daemonised.
+  __globals = new Globals(options.config_file,
+                          options.cluster_config_file);
+
+  AlarmManager* alarm_manager = NULL;
   Alarm* scale_operation_alarm = NULL;
   SNMP::U32Scalar* remaining_nodes_scalar = NULL;
   SNMP::CounterTable* timers_processed_table = NULL;
@@ -242,11 +276,12 @@ int main(int argc, char** argv)
 
   // Create Chronos's alarm objects. Note that the alarm identifier strings must match those
   // in the alarm definition JSON file exactly.
-  scale_operation_alarm = new Alarm("chronos", AlarmDef::CHRONOS_SCALE_IN_PROGRESS,
-                                               AlarmDef::MINOR);
+  alarm_manager = new AlarmManager();
+  scale_operation_alarm = new Alarm(alarm_manager,
+                                    "chronos",
+                                    AlarmDef::CHRONOS_SCALE_IN_PROGRESS,
+                                    AlarmDef::MINOR);
 
-  // Start the alarm request agent
-  AlarmReqAgent::get_instance().start();
   // Explicitly clear scaling alarm in case we died while the alarm was still active,
   // to ensure that the alarm is not then stuck in a set state.
   scale_operation_alarm->clear();
@@ -322,12 +357,16 @@ int main(int argc, char** argv)
                                               min_token_rate);
 
   // Finally, set up the HTTPStack and handlers
-  HttpStack* http_stack = HttpStack::get_instance();
   int bind_port;
   int http_threads;
   __globals->get_bind_port(bind_port);
   __globals->get_threads(http_threads);
 
+  HttpStack* http_stack = new HttpStack(http_threads,
+                                        exception_handler,
+                                        NULL,
+                                        load_monitor,
+                                        NULL);
   HttpStackUtils::PingHandler ping_handler;
   ControllerTask::Config controller_config(controller_rep, handler);
   HttpStackUtils::SpawningHandler<ControllerTask, ControllerTask::Config> controller_handler(&controller_config,
@@ -336,7 +375,7 @@ int main(int argc, char** argv)
   try
   {
     http_stack->initialize();
-    http_stack->configure(bind_address, bind_port, http_threads, exception_handler, NULL, load_monitor, NULL);
+    http_stack->bind_tcp_socket(bind_address, bind_port);
     http_stack->register_handler((char*)"^/ping$", &ping_handler);
     http_stack->register_handler((char*)"^/timers", &controller_handler);
     http_stack->start();
@@ -383,11 +422,10 @@ int main(int argc, char** argv)
   delete hc; hc = NULL;
   delete exception_handler; exception_handler = NULL;
 
-  // Stop the alarm request agent
-  AlarmReqAgent::get_instance().stop();
-
   // Delete Chronos's alarm object
   delete scale_operation_alarm;
+  delete alarm_manager;
+  delete http_stack; http_stack = NULL;
 
   sem_destroy(&term_sem);
 

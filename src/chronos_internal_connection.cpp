@@ -59,11 +59,10 @@ ChronosInternalConnection::ChronosInternalConnection(HttpResolver* resolver,
                                                      SNMP::U32Scalar* remaining_nodes_scalar,
                                                      SNMP::CounterTable* timers_processed_table,
                                                      SNMP::CounterTable* invalid_timers_processed_table) :
-  _http(new HttpConnection("",
-                           false,
-                           resolver,
-                           SASEvent::HttpLogLevel::NONE,
-                           NULL)),
+  _http(new HttpClient(false,
+                       resolver,
+                       SASEvent::HttpLogLevel::NONE,
+                       NULL)),
   _handler(handler),
   _replicator(replicator),
   _alarm(alarm),
@@ -135,6 +134,8 @@ void ChronosInternalConnection::resynchronize()
   TRC_DEBUG("Starting scaling operation");
 
   int nodes_remaining = cluster_nodes.size();
+  int default_port;
+  __globals->get_bind_port(default_port);
 
   for (std::vector<std::string>::iterator it = cluster_nodes.begin();
                                           it != cluster_nodes.end();
@@ -146,18 +147,8 @@ void ChronosInternalConnection::resynchronize()
       _remaining_nodes_scalar->value = nodes_remaining;
     }
 
-    std::string address;
-    int port;
-    if (!Utils::split_host_port(*it, address, port))
-    {
-      // Just use the server as the address.
-      // LCOV_EXCL_START - splitting code is tested elsewhere
-      address = *it;
-      __globals->get_bind_port(port);
-      // LCOV_EXCL_STOP
-    }
+    std::string server_to_sync = Utils::uri_address(*it, default_port);
 
-    std::string server_to_sync = address + ":" + std::to_string(port);
     HTTPCode rc = resynchronise_with_single_node(server_to_sync,
                                                  cluster_nodes,
                                                  localhost);
@@ -187,7 +178,7 @@ void ChronosInternalConnection::resynchronize()
 }
 
 HTTPCode ChronosInternalConnection::resynchronise_with_single_node(
-                             const std::string server_to_sync,
+                             const std::string& server_to_sync,
                              std::vector<std::string> cluster_nodes,
                              std::string localhost)
 {
@@ -197,6 +188,9 @@ HTTPCode ChronosInternalConnection::resynchronise_with_single_node(
   std::string cluster_view_id;
   __globals->get_cluster_view_id(cluster_view_id);
 
+  uint32_t current_time = Utils::get_time();
+  uint32_t time_from = 0;
+  bool use_time_from_param = false;
   std::string response;
   HTTPCode rc;
 
@@ -204,13 +198,16 @@ HTTPCode ChronosInternalConnection::resynchronise_with_single_node(
   do
   {
     std::map<TimerID, int> delete_map;
-
+    std::string path = create_path(localhost,
+                                   cluster_view_id,
+                                   time_from,
+                                   use_time_from_param);
     rc = send_get(server_to_sync,
-                  localhost,
-                  PARAM_SYNC_MODE_VALUE_SCALE,
-                  cluster_view_id,
+                  path,
                   MAX_TIMERS_IN_RESPONSE,
                   response);
+
+    use_time_from_param = true;
 
     if ((rc == HTTP_PARTIAL_CONTENT) ||
         (rc == HTTP_OK))
@@ -291,6 +288,9 @@ HTTPCode ChronosInternalConnection::resynchronise_with_single_node(
               delete timer; timer = NULL;
               continue;
             }
+
+            // Update our view of the newest timer we've processed
+            time_from = timer->next_pop_time() - current_time;
 
             // Decide what we're going to do with this timer.
             int old_level = 0;
@@ -400,7 +400,7 @@ HTTPCode ChronosInternalConnection::resynchronise_with_single_node(
             }
 
           }
-          catch (JsonFormatError err)
+          catch (JsonFormatError& err)
           {
             // A single entry is badly formatted. This is unexpected but we'll try
             // to keep going and process the rest of the timers.
@@ -424,7 +424,7 @@ HTTPCode ChronosInternalConnection::resynchronise_with_single_node(
           rc = HTTP_BAD_REQUEST;
         }
       }
-      catch (JsonFormatError err)
+      catch (JsonFormatError& err)
       {
         // We've failed to find the Timers array. This suggests that
         // there's something seriously wrong with the node we're trying
@@ -434,14 +434,18 @@ HTTPCode ChronosInternalConnection::resynchronise_with_single_node(
       }
 
       // Send a DELETE to all the nodes to update their timer references
-      if (delete_map.size() > 0)
+      if (!delete_map.empty())
       {
         std::string delete_body = create_delete_body(delete_map);
+        int default_port;
+        __globals->get_bind_port(default_port);
+
         for (std::vector<std::string>::iterator it = cluster_nodes.begin();
                                                 it != cluster_nodes.end();
                                                 ++it)
         {
-          HTTPCode delete_rc = send_delete(*it, delete_body);
+          std::string delete_server = Utils::uri_address(*it, default_port);
+          HTTPCode delete_rc = send_delete(delete_server, delete_body);
           if (delete_rc != HTTP_ACCEPTED)
           {
             // We've received an error response to the DELETE request. There's
@@ -471,32 +475,45 @@ HTTPCode ChronosInternalConnection::resynchronise_with_single_node(
   return rc;
 }
 
-HTTPCode ChronosInternalConnection::send_delete(const std::string server,
-                                                const std::string body)
+HTTPCode ChronosInternalConnection::send_delete(const std::string& server,
+                                                const std::string& body)
 {
   std::string path = "/timers/references";
-  HTTPCode rc = _http->send_delete(path, 0, body, server);
+  HTTPCode rc = _http->send_delete("http://" + server + path, 0, body);
   return rc;
 }
 
-HTTPCode ChronosInternalConnection::send_get(const std::string server,
-                                             const std::string node_for_replicas_param,
-                                             const std::string sync_mode_param,
-                                             std::string cluster_view_id_param,
-                                             int max_timers,
-                                             std::string& response)
+std::string ChronosInternalConnection::create_path(
+                                     const std::string& node_for_replicas_param,
+                                     std::string cluster_view_id_param,
+                                     uint32_t time_from_param,
+                                     bool use_time_from_param)
 {
   std::string path = std::string("/timers?") +
                      PARAM_NODE_FOR_REPLICAS + "="  + node_for_replicas_param + ";" +
-                     PARAM_SYNC_MODE + "=" + sync_mode_param + ";" +
+                     PARAM_SYNC_MODE + "=" + PARAM_SYNC_MODE_VALUE_SCALE + ";" +
                      PARAM_CLUSTER_VIEW_ID + "="  + cluster_view_id_param;
 
+  if (use_time_from_param)
+  {
+    path += std::string(";") +
+            PARAM_TIME_FROM + "=" + std::to_string(time_from_param);
+  }
+
+  return path;
+}
+
+HTTPCode ChronosInternalConnection::send_get(const std::string& server,
+                                             const std::string& path,
+                                             int max_timers,
+                                             std::string& response)
+{
   std::string range_header = std::string(HEADER_RANGE) + ":" +
                              std::to_string(MAX_TIMERS_IN_RESPONSE);
   std::vector<std::string> headers;
   headers.push_back(range_header);
 
-  return _http->send_get(path, response, headers, server, 0);
+  return _http->send_get("http://" + server + path, response, headers, 0);
 }
 
 std::string ChronosInternalConnection::create_delete_body(std::map<TimerID, int> delete_map)
