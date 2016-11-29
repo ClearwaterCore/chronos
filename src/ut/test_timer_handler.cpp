@@ -936,7 +936,7 @@ TEST_F(TestTimerHandlerAddAndReturn, ReturnTimerWontPopAgain)
 // Return a timer to the handler as if it has been passed back from
 // HTTPCallback and wont pop again. Give the timer an interval and
 // repeat_for value of 0. The timer should be tombstoned before
-// being put back into the store. 
+// being put back into the store.
 TEST_F(TestTimerHandlerAddAndReturn, TombstoneZeroIntervalAndRepeatForTimer)
 {
   Timer* timer = default_timer(1);
@@ -1162,6 +1162,36 @@ TEST_F(TestTimerHandlerAddAndReturn, UpdateReplicaTrackerValueForInformationTime
   delete insert_pair.active_timer;
 }
 
+// Test that if there's an out-of-date active timer, that's updated in
+// preference to any informational timer.
+TEST_F(TestTimerHandlerAddAndReturn, UpdateReplicaTrackerValueForOldActiveTimerWithInfoTimer)
+{
+  // Set up the timers
+  Timer* timer_active = default_timer(1);
+  timer_active->_replica_tracker = 15;
+  timer_active->cluster_view_id = "different-id";
+  Timer* timer_info = default_timer(1);
+  timer_info->_replica_tracker = 15;
+  timer_info->cluster_view_id = "different-id";
+  TimerPair insert_pair;
+  insert_pair.active_timer = timer_active;
+  insert_pair.information_timer = timer_info;
+
+  // Update the replica tracker. This should update the active timer.
+  EXPECT_CALL(*_store, fetch(_, _)).
+                       WillOnce(DoAll(SetArgReferee<1>(insert_pair),Return(true)));
+  EXPECT_CALL(*_store, insert(_, _, _, _)).
+                       WillOnce(SaveArg<0>(&insert_pair));
+  _th->update_replica_tracker_for_timer(1u, 0);
+  ASSERT_EQ(0u, insert_pair.active_timer->_replica_tracker);
+  ASSERT_EQ(15u, insert_pair.information_timer->_replica_tracker);
+
+  // Delete the timers (this is normally done by the insert call, but this
+  // is mocked out)
+  delete insert_pair.active_timer;
+  delete insert_pair.information_timer;
+}
+
 // Timer handler tests with a real timer store. This allows better tests of resync
 class TestTimerHandlerRealStore : public Base
 {
@@ -1263,9 +1293,11 @@ TEST_F(TestTimerHandlerRealStore, SelectTimersNoMatchesReqNode)
   __globals->unlock();
 
   // Now just call get_timers_for_node (as if someone had done a resync without
-  // changing the cluster configuration). No timers should be returned
+  // changing the cluster configuration). No timers should be returned. Use
+  // a maximum timer count of 1, so that if this does pick up the single timer
+  // it would return 206, so we can detect that error in this UT as well.
   std::string get_response;
-  int rc = _th->get_timers_for_node("10.0.0.4:9999", 2, updated_cluster_view_id, 0, get_response);
+  int rc = _th->get_timers_for_node("10.0.0.4:9999", 1, updated_cluster_view_id, 0, get_response);
   std::string exp_rsp = "\\\{\"Timers\":\\\[]}";
   EXPECT_THAT(get_response, MatchesRegex(exp_rsp));
   EXPECT_EQ(rc, 200);
