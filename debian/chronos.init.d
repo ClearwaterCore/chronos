@@ -134,6 +134,7 @@ do_wait_sync() {
   # Query Chronos via the 0MQ socket, parse out the number of Chronos nodes
   # still needing to be queried, and check if it's 0.
   # If not, wait for 5s and try again.
+  num_cycles_unchanged=0
   while true
   do
     # Retrieve the statistics.
@@ -144,6 +145,31 @@ do_wait_sync() {
     if [ "$nodes" = "0" ]
     then
       break
+    fi
+
+    # If the nodes left to query hasn't changed for the last 12 cycles (i.e.
+    # over the minute), make a syslog and stop waiting.  We know that there are
+    # issues in CCv9 and earlier with the resync process which means that any
+    # resync on a loaded system is likely to hang indefinitely (until all timers have
+    # expired), so just wait for 1 minute to allow lightly loaded systems to
+    # complete the sync in a timely fashion.
+    #
+    # Note that the impact of such a failed resync is minor - some authentications
+    # and registrations will time out late, but its unlikely that this will be
+    # noticed by subscribers.
+    if [ "$nodes" = "$last_nodes" ]
+    then
+      num_cycles_unchanged=$(( $num_cycles_unchanged + 1 ))
+
+      if [ $num_cycles_unchanged -ge 12 ]
+      then
+        logger chronos: Wait sync aborting as unsynced node count apparently stuck at $nodes
+        break
+      fi
+
+    else
+      last_nodes=$nodes
+      num_cycles_unchanged=0
     fi
 
     # Indicate that we're still waiting, then sleep for 5 secs and repeat
