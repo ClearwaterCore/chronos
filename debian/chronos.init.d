@@ -148,18 +148,21 @@ do_wait_sync() {
       break
     fi
 
-    # If the nodes left to query hasn't changed for the last 120 cycles (i.e.
-    # over the last 10 minutes), make a syslog and stop waiting.  We don't
-    # expect resyncs to take more than 10 minutes in normal operation, so this
-    # suggests that the local service has failed.  We need to
-    # end the wait in this case as the potential service impact of aborting
-    # the wait early is far outweighed by the impact on management operations
-    # of an infinite wait.
+    # If the nodes left to query hasn't changed for the last 12 cycles (i.e.
+    # over the minute), make a syslog and stop waiting.  We know that there are
+    # issues in CCv9 and earlier with the resync process which means that any
+    # resync on a loaded system is likely to hang indefinitely (until all timers have
+    # expired), so just wait for 1 minute to allow lightly loaded systems to
+    # complete the sync in a timely fashion.
+    #
+    # Note that the impact of such a failed resync is minor - some authentications
+    # and registrations will time out late, but its unlikely that this will be
+    # noticed by subscribers.
     if [ "$nodes" = "$last_nodes" ]
     then
       num_cycles_unchanged=$(( $num_cycles_unchanged + 1 ))
 
-      if [ $num_cycles_unchanged -ge 120 ]
+      if [ $num_cycles_unchanged -ge 12 ]
       then
         logger chronos: Wait sync aborting as unsynced node count apparently stuck at $nodes
         break
